@@ -58,6 +58,19 @@ public class IBankRouteBuilder extends RouteBuilder {
 	engine.eval(new InputStreamReader(new ClassPathResource("js/bank.js").getInputStream()));
     }
 
+    protected Double getDoubleValue(Object obj){
+	if(obj instanceof BigDecimal){
+	    return ((BigDecimal)obj).doubleValue();
+	} else if(obj instanceof Double){
+	    return (Double)obj;
+	} else if(obj instanceof Integer){
+	    return ((Number)obj).doubleValue();
+	} else {
+	    throw new java.lang.ClassCastException("Class " + obj.getClass().getName() + " can't be casted to Double");
+	}
+	    
+    }
+
     /**
      * Let's configure the Camel routing rules using Java code...
      */
@@ -82,14 +95,7 @@ public class IBankRouteBuilder extends RouteBuilder {
 	interceptFrom("seda:bank.*")
 	    .marshal().json(JsonLibrary.Jackson)
 	    .choice()
-	    .when().jsonpath("$..from[?(@.customer == $.to.customer)]")
-	    // Checking if from and to is the same customer
-	    .process(new Processor(){
-		    public void process(Exchange outExchange) throws Exception{
-			throw new java.lang.IllegalStateException("Can't transfer within same account!");
-		    }
-		})
-	    .otherwise()
+	    .when().jsonpath("$..from[?(@.account.number != $.to.account.number)]")
 	    // Trying to perform transaction. Throwing exception if not possible
 	    .process(new Processor(){
 		    public void process(Exchange outExchange) {
@@ -97,45 +103,48 @@ public class IBankRouteBuilder extends RouteBuilder {
 			String operation = message.getHeader("operation").toString();
 			Map accountFrom = (Map)accountsRef.get().get(new JsonPathExpression("$.from.customer").evaluate(outExchange).toString());
 			Map accountTo = (Map)accountsRef.get().get(new JsonPathExpression("$.to.customer").evaluate(outExchange).toString());
-			Object a = new JsonPathExpression("$.amount").evaluate(outExchange);
-			Double amount;
-			if(a instanceof BigDecimal)
-			    amount = ((BigDecimal)a).doubleValue();
-			else
-			    amount = (Double)a;
+			Double amount = getDoubleValue(new JsonPathExpression("$.amount").evaluate(outExchange));
 			
 			System.out.println(accountFrom.get("balance"));
 			switch(operation.toLowerCase()){
 			case "send": {
 			    //FIXME: SHOUL BE TRANSACTED HERE
-			    if((Double)accountFrom.get("balance") < amount){
+			    if(getDoubleValue(accountFrom.get("balance")) < amount){
 				throw new java.lang.IllegalStateException("Insufficient funds");
 			    } else {
-				accountFrom.put("balance", (Double)accountFrom.get("balance") - amount);
-				accountTo.put("balance", (Double)accountTo.get("balance") + amount);
+				accountFrom.put("balance", getDoubleValue(accountFrom.get("balance")) - amount);
+				accountTo.put("balance", getDoubleValue(accountTo.get("balance")) + amount);
 			    }
 			};
 			case "receive": {
 			    //FIXME: SHOUL BE TRANSACTED HERE
-			    if((Double)accountTo.get("balance") < (Double)new JsonPathExpression("$.amount").evaluate(outExchange)){
+			    if(getDoubleValue(accountTo.get("balance")) < getDoubleValue(new JsonPathExpression("$.amount").evaluate(outExchange))){
 				throw new java.lang.IllegalStateException("Insufficient funds");
 			    } else {
 				//FIXME: SHOUL BE TRANSACTED HERE
-				accountFrom.put("balance", (Double)accountFrom.get("balance") + amount);
-				accountTo.put("balance", (Double)accountTo.get("balance") - amount);
+				accountFrom.put("balance", getDoubleValue(accountFrom.get("balance")) + amount);
+				accountTo.put("balance", getDoubleValue(accountTo.get("balance")) - amount);
 			    }
 			};
 			case "withdraw": {
-			    if((Double)accountFrom.get("balance") < (Double)new JsonPathExpression("$.amount").evaluate(outExchange)){
+			    if(getDoubleValue(accountFrom.get("balance")) < getDoubleValue(new JsonPathExpression("$.amount").evaluate(outExchange))){
 				throw new java.lang.IllegalStateException("Insufficient funds");
 			    } else {
-				accountFrom.put("balance", (Double)accountFrom.get("balance") - amount);
+				accountFrom.put("balance", getDoubleValue(accountFrom.get("balance")) - amount);
 			    }
 			}
 			}
 		    }
 		})
 	    .to("jms:queue:bank.operate")
+	    .otherwise()	    
+	    .filter(header("operation").isNotEqualTo("withdraw"))
+  	    // Checking if from and to is the same customer
+	    .process(new Processor(){
+		    public void process(Exchange outExchange) throws Exception{
+			throw new java.lang.IllegalStateException("Can't transfer within same account!");
+		    }
+		})
 	    .end();
 	    
         from("seda:bank.send")
