@@ -2,7 +2,6 @@ package com.acme;
 
 import java.util.Map;
 import javax.jms.ConnectionFactory;
-import org.apache.activemq.ActiveMQConnectionFactory;
 import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
@@ -27,11 +26,11 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
+import java.math.BigDecimal;
+
 import java.io.InputStreamReader;
 import java.io.IOException;
 import org.springframework.core.io.ClassPathResource;
-
-
 
 
 /**
@@ -42,6 +41,13 @@ public class IBankRouteBuilder extends RouteBuilder {
     private static final ScriptEngineManager manager = new ScriptEngineManager();
     private static final ScriptEngine engine = manager.getEngineByName("JavaScript");
     private static final AtomicReference<Map> accountsRef = new AtomicReference<Map>(null);
+
+    private final ConnectionFactory connectionFactory;
+    
+    public IBankRouteBuilder(ConnectionFactory connectionFactory){
+	this.connectionFactory = connectionFactory;
+    }
+    
     
     protected void initializeEngine(CamelContext ctx) 
 	throws IOException, ScriptException, Exception {
@@ -58,15 +64,21 @@ public class IBankRouteBuilder extends RouteBuilder {
     public void configure() throws IOException, ScriptException, Exception {
 	initializeEngine(getContext());
 	
-	ConnectionFactory connectionFactory = new ActiveMQConnectionFactory("tcp://localhost:61616");
 	// Note we can explicit name the component
-	getContext().addComponent("jms", JmsComponent.jmsComponentAutoAcknowledge(connectionFactory));
+	if(getContext().getComponent("jms", false) == null){	    
+	    getContext().addComponent("jms", JmsComponent.jmsComponentAutoAcknowledge(connectionFactory));
+	}
 
 	onException(java.lang.IllegalStateException.class)
-	    .convertBodyTo(String.class)
-	    .to("file:out/bank/failures?fileName=${date:now:yyyyMMdd-hhmmssSSSS}.${in.header.operation}")
-	    .to("jms:queue:das.failures");
-	    
+	    .handled(true)
+	    .logExhausted(false)
+	    .logStackTrace(false)
+	    .to("file:out/bank/failed?fileName=${date:now:yyyyMMdd-hhmmssSSSS}.${in.header.operation}")
+	    .to("jms:queue:das.failed");
+
+	interceptSendToEndpoint("jms:queue:bank.operate")
+	    .to("jms:queue:das.completed");
+	
 	interceptFrom("seda:bank.*")
 	    .marshal().json(JsonLibrary.Jackson)
 	    .choice()
@@ -85,7 +97,13 @@ public class IBankRouteBuilder extends RouteBuilder {
 			String operation = message.getHeader("operation").toString();
 			Map accountFrom = (Map)accountsRef.get().get(new JsonPathExpression("$.from.customer").evaluate(outExchange).toString());
 			Map accountTo = (Map)accountsRef.get().get(new JsonPathExpression("$.to.customer").evaluate(outExchange).toString());
-			Double amount = (Double)new JsonPathExpression("$.amount").evaluate(outExchange);
+			Object a = new JsonPathExpression("$.amount").evaluate(outExchange);
+			Double amount;
+			if(a instanceof BigDecimal)
+			    amount = ((BigDecimal)a).doubleValue();
+			else
+			    amount = (Double)a;
+			
 			System.out.println(accountFrom.get("balance"));
 			switch(operation.toLowerCase()){
 			case "send": {
@@ -115,9 +133,9 @@ public class IBankRouteBuilder extends RouteBuilder {
 			    }
 			}
 			}
-			new java.lang.Exception("From and To can't be the same");
 		    }
 		})
+	    .to("jms:queue:bank.operate")
 	    .end();
 	    
         from("seda:bank.send")
