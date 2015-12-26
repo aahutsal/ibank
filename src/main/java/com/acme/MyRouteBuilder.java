@@ -6,72 +6,129 @@ import org.apache.activemq.ActiveMQConnectionFactory;
 import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
+import org.apache.camel.Message;
+import org.apache.camel.Body;
+import org.apache.camel.CamelContext;
+import org.apache.camel.ProducerTemplate;
+import org.apache.camel.impl.DefaultProducerTemplate;    
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.jms.JmsComponent;
 import org.apache.camel.model.ModelCamelContext;
 import org.apache.camel.model.language.JsonPathExpression;
+import org.apache.camel.model.dataformat.JsonLibrary;
+
+import javax.script.ScriptContext;
+import javax.script.ScriptEngine;
+import javax.script.ScriptEngineFactory;
+import javax.script.ScriptEngineManager;
+import javax.script.ScriptException;
+
+import java.util.Map;
+import java.util.HashMap;
+import java.util.concurrent.atomic.AtomicReference;
+
+import java.io.InputStreamReader;
+import java.io.IOException;
+import org.springframework.core.io.ClassPathResource;
+
+
 
 
 /**
  * A Camel Java DSL Router
  */
 public class MyRouteBuilder extends RouteBuilder {
+    
+    private static final ScriptEngineManager manager = new ScriptEngineManager();
+    private static final ScriptEngine engine = manager.getEngineByName("JavaScript");
+    private static final AtomicReference<Map> accountsRef = new AtomicReference<Map>(null);
+    
+    protected void initializeEngine(CamelContext ctx) 
+	throws IOException, ScriptException, Exception {
+	ProducerTemplate producer = new DefaultProducerTemplate(ctx);
+	producer.start();
+	engine.put("producer", producer);
+	engine.put("accountsRef", accountsRef);
+	engine.eval(new InputStreamReader(new ClassPathResource("js/bank.js").getInputStream()));
+    }
+
     /**
      * Let's configure the Camel routing rules using Java code...
      */
-    public void configure() {
-	// ConnectionFactory connectionFactory = new ActiveMQConnectionFactory("tcp://localhost:61616");
-	// // Note we can explicit name the component
-	// getContext().addComponent("jms", JmsComponent.jmsComponentAutoAcknowledge(connectionFactory));
+    public void configure() throws IOException, ScriptException, Exception {
+	initializeEngine(getContext());
 	
+	ConnectionFactory connectionFactory = new ActiveMQConnectionFactory("tcp://localhost:61616");
+	// Note we can explicit name the component
+	getContext().addComponent("jms", JmsComponent.jmsComponentAutoAcknowledge(connectionFactory));
 
-        // here is a sample which processes the input files
-        // (leaving them in place - see the 'noop' flag)
-        // then performs content based routing on the message using XPath
-        // from("netty:tcp://0.0.0.0:6789?sync=true&textline=true&receiveBufferSize=8192&decoderMaxLineLength=8192")
-	//     .log("Received: ${body}")
-	//     .beanRef("main", "execCommand");
-    
-        // from("websocket://0.0.0.0:8443/command?sslContextParametersRef=#sslContextParameters&staticResources=classpath:.")
-	//     .log("Received: ${body}")
-	//     .beanRef("main", "execCommand");
-
-
-        // from("jms:queue:facebook.ratings")
-	//     .log("Facebook Rating received: ${headers}")
-	//     .setHeader(Exchange.CONTENT_TYPE, constant("text/plain"))	    
-	//     .setHeader(Exchange.HTTP_QUERY, simple("q=${headers.text}&key=" + keyGoogle))
-	//     //.setHeader(Exchange.HTTP_METHOD, constant(org.apache.camel.component.http4.HttpMethods.POST))
-	//     //.setHeader("X-HTTP-Method-Override", constant("GET"))
-	//     //.setBody(simple("q=${headers.text}"))
-	//     .to("https4://www.googleapis.com/language/translate/v2/detect")
-	//     //.beanRef("languageDetector", "detect")
-	//     .split(new JsonPathExpression("$.data.detections"))
-	//     // .processor(new Processor(){
-	//     // 	    public void process(Exchange ex){
-	//     // 		String lang = ((Map<String, String>)((net.minidev.json.JSONArray)ex.getIn().getBody()).get(0)).get("language").toString();
-	//     // 		ex.getIn().setHeader("lang", lang);
-	//     // 	    }
-	//     // 	})
-	//     .setHeader("lang", simple("${body[0][language]}"))
-	//     .log("LANGUAGE: ${headers.lang}")
-	//     .beanRef("facebookRating", "chooseComment")
-	//     .to("jms:queue:bot.command");
-
-	// onException(org.apache.camel.CamelExecutionException.class)
-	//     .to("log:com.acme?showAll=true&multiline=true&showException=true&showStackTrace=true");
-
+	onException(java.lang.IllegalStateException.class)
+	    .convertBodyTo(String.class)
+	    .to("file:out/bank/failures?fileName=${date:now:yyyyMMdd-hhmmssSSSS}.${in.header.operation}")
+	    .to("jms:queue:das.failures");
+	    
+	interceptFrom("seda:bank.*")
+	    .marshal().json(JsonLibrary.Jackson)
+	    .choice()
+	    .when().jsonpath("$..from[?(@.customer == $.to.customer)]")
+	    // Checking if from and to is the same customer
+	    .process(new Processor(){
+		    public void process(Exchange outExchange) throws Exception{
+			throw new java.lang.IllegalStateException("Can't transfer within same account!");
+		    }
+		})
+	    .otherwise()
+	    // Trying to perform transaction. Throwing exception if not possible
+	    .process(new Processor(){
+		    public void process(Exchange outExchange) {
+			Message message = outExchange.getIn();
+			String operation = message.getHeader("operation").toString();
+			Map accountFrom = (Map)accountsRef.get().get(new JsonPathExpression("$.from.customer").evaluate(outExchange).toString());
+			Map accountTo = (Map)accountsRef.get().get(new JsonPathExpression("$.to.customer").evaluate(outExchange).toString());
+			Double amount = (Double)new JsonPathExpression("$.amount").evaluate(outExchange);
+			System.out.println(accountFrom.get("balance"));
+			switch(operation.toLowerCase()){
+			case "send": {
+			    //FIXME: SHOUL BE TRANSACTED HERE
+			    if((Double)accountFrom.get("balance") < amount){
+				throw new java.lang.IllegalStateException("Insufficient funds");
+			    } else {
+				accountFrom.put("balance", (Double)accountFrom.get("balance") - amount);
+				accountTo.put("balance", (Double)accountTo.get("balance") + amount);
+			    }
+			};
+			case "receive": {
+			    //FIXME: SHOUL BE TRANSACTED HERE
+			    if((Double)accountTo.get("balance") < (Double)new JsonPathExpression("$.amount").evaluate(outExchange)){
+				throw new java.lang.IllegalStateException("Insufficient funds");
+			    } else {
+				//FIXME: SHOUL BE TRANSACTED HERE
+				accountFrom.put("balance", (Double)accountFrom.get("balance") + amount);
+				accountTo.put("balance", (Double)accountTo.get("balance") - amount);
+			    }
+			};
+			case "withdraw": {
+			    if((Double)accountFrom.get("balance") < (Double)new JsonPathExpression("$.amount").evaluate(outExchange)){
+				throw new java.lang.IllegalStateException("Insufficient funds");
+			    } else {
+				accountFrom.put("balance", (Double)accountFrom.get("balance") - amount);
+			    }
+			}
+			}
+			new java.lang.Exception("From and To can't be the same");
+		    }
+		})
+	    .end();
+	    
         from("seda:bank.send")
-	    .to("log:com.acme?showAll=true&multiline=true&showStackTrace=true")
-	    .to("file:target/bank/send/");
+	    .log("${in.header.operation}:${in.body}");
 
-        from("direct:bank.receive")
-	    .log("${body}")
-	    .to("file:target/bank/receive/");
+        from("seda:bank.receive")
+	    .log("${in.header.operation}:${in.body}");
 
-        from("direct:bank.withdraw")
-	    .log("${body}")
-	    .to("file:target/bank/withdraw/");
+        from("seda:bank.withdraw")
+	    .log("${in.header.operation}:${in.body}");
+
     }
 
 }

@@ -20,6 +20,7 @@ var console = {
 
 console.log('Producer', producer);
 
+
 var fn = {}; // context
 // Adopted from here: https://gist.github.com/bripkens/8597903
 // Makes ES7 Promises polyfill work on Nashorn https://github.com/jakearchibald/es6-promise
@@ -88,34 +89,40 @@ var fn = {}; // context
     
 })(fn);
 
-var customers = {
+var accounts = {
     Jack: {
-	account: 'AX449XZ2'
+	account: 'AX449XZ2',
+	balance: 100000.00
     },
     Gabriel: {
-	account: 'B43SZ22N'
+	account: 'B43SZ22N',
+	balance: 100000.00
     },
     Lucie: {
-	account: 'BU22A21U'
+	account: 'BU22A21U',
+	balance: 100000.00
     },
     Bob:{
-	account: 'A932X22M'
+	account: 'A932X22M',
+	balance: 100000.00
     },
     Lena:{
-	account: 'Z28XSDB'
+	account: 'Z28XSDB',
+	balance: 100000.00
     }
 };
 
+accountsRef.set(accounts); // setting reference
 
 var Bank = function (iBank){
     var randomTimeout = function(){ return Math.random() * 1000; };
     var randomId  = function(){ return generateUUID(); };
     var randomCustomer = function(){
-	var keys = Object.keys(customers),
+	var keys = Object.keys(accounts),
 	    key = keys[Math.floor(Math.random() * keys.length)];
-	return {customer: key, account: customers[key]};
+	return {customer: key, account: accounts[key]};
     };
-    var randomAmount = function(){ return Math.random() * 10000 * 100; };
+    var randomAmount = function(){ return Math.random() * 1000; };
     var randomDate = function(){ return Math.random() * new Date().getTime(); };
 
     var perform = function(){
@@ -128,8 +135,16 @@ var Bank = function (iBank){
 	});
 	fn.setTimeout(perform, randomTimeout());
     };
+
+    var dumpAccounts = function () {
+        for(var acc in accounts){
+	    console.log('Account:', acc, accounts[acc].account, accounts[acc].balance);
+	}
+    }
+
     console.log('Scheduling first execution');
-    fn.setTimeout(perform, 5000);
+    fn.setTimeout(perform, 1000);
+    fn.setInterval(dumpAccounts, 10000)
 };
 
 var IBank = function () {    
@@ -141,21 +156,22 @@ var IBank = function () {
     };
     
     this.operate = function(obj) {
+	var op = getRandom(operations);
+	console.log('Operation:', op);
 	this[getRandom(operations)](obj);
     };
 
     this.send = function (obj) {
-	producer.sendBody("seda:bank.send", JSON.stringify(obj));
+	producer.sendBodyAndHeader("seda:bank.send", (obj), 'operation', 'send');
     };
     
     this.withdraw = function (obj) {
-	producer.sendBody("seda:bank.withdraw", obj);
+	producer.sendBodyAndHeader("seda:bank.withdraw", (obj), 'operation', 'withdraw');
     };
 
     this.receive = function (obj) {
-	producer.sendBody("seda:bank.receive", obj);
-    };
-    
+	producer.sendBodyAndHeader("seda:bank.receive", (obj), 'operation', 'receive');
+    };    
 };
 
 new Bank(new IBank());
