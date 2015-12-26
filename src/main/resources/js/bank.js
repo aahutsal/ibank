@@ -91,23 +91,23 @@ var fn = {}; // context
 
 var accounts = {
     Jack: {
-	account: 'AX449XZ2',
+	number: 'AX449XZ2',
 	balance: 100000.00
     },
     Gabriel: {
-	account: 'B43SZ22N',
+	number: 'B43SZ22N',
 	balance: 100000.00
     },
     Lucie: {
-	account: 'BU22A21U',
+	number: 'BU22A21U',
 	balance: 100000.00
     },
     Bob:{
-	account: 'A932X22M',
+	number: 'A932X22M',
 	balance: 100000.00
     },
     Lena:{
-	account: 'Z28XSDB',
+	number: 'Z28XSDB',
 	balance: 100000.00
     }
 };
@@ -137,9 +137,11 @@ var Bank = function (iBank){
     };
 
     var dumpAccounts = function () {
+	console.log('================================================');
         for(var acc in accounts){
-	    console.log('Account:', acc, accounts[acc].account, accounts[acc].balance);
+	    console.log('Account:', acc, accounts[acc].number, accounts[acc].balance);
 	}
+	console.log('================================================')
     }
 
     console.log('Scheduling first execution');
