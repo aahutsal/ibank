@@ -35,11 +35,9 @@ public class MainApp {
 	// enable hangup support so you can press ctrl + c to terminate the JVM
 	main.enableHangupSupport();
 
-	//initializeEngine(main);
-	//initializeProxy();
-	// bind MyBean into the registery	
+	//bind main bean into the registery	
 	main.bind("main", new MainApp());
-	main.addRouteBuilder(new MyRouteBuilder());
+	main.addRouteBuilder(new IBankRouteBuilder());
 	System.out.println("Starting Camel. Use ctrl + c to terminate the JVM.\n");
 	main.run(args);
     }

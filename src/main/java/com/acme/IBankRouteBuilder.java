@@ -37,7 +37,7 @@ import org.springframework.core.io.ClassPathResource;
 /**
  * A Camel Java DSL Router
  */
-public class MyRouteBuilder extends RouteBuilder {
+public class IBankRouteBuilder extends RouteBuilder {
     
     private static final ScriptEngineManager manager = new ScriptEngineManager();
     private static final ScriptEngine engine = manager.getEngineByName("JavaScript");
