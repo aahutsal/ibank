@@ -1,0 +1,7 @@
+db.completed.createIndex({'from.customer':1})
+db.completed.createIndex({'from.account.number':1})
+db.completed.createIndex({'amount':1})
+
+db.failed.createIndex({'from.customer':1})
+db.failed.createIndex({'from.account.number':1})
+db.failed.createIndex({'amount':1})
