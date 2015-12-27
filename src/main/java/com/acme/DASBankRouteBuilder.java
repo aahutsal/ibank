@@ -58,7 +58,21 @@ public class DASBankRouteBuilder extends RouteBuilder {
 	    .log("COMPLETED: ${in.header.operation}:${in.body}")
 	    .convertBodyTo(String.class)
 	    .to("mongodb:mongoBean?database=ibank&collection=completed&operation=insert");
-	    
-    }
 
+        from("jms:queue:das.completed")
+	    .log("COMPLETED: ${in.header.operation}:${in.body}")
+	    .convertBodyTo(String.class)
+	    .to("mongodb:mongoBean?database=ibank&collection=completed&operation=insert");
+
+
+
+	from("direct:findAll")
+	    .setHeader("CamelMongoDbDatabase", constant("ibank"))
+	    .setHeader("CamelMongoDbCollection", header("CamelHttpQuery"))
+	    .to("mongodb:myDb?database=ibank&collection=completed&operation=findAll&dynamicity=true")
+	    .to("mock:resultFindAll");
+	
+	from("restlet:http://localhost:8181/reports?restletMethod=post")
+	    .to("direct:findAll");
+    }
 }
