@@ -1,0 +1,3 @@
+[submodule "docker-activemq"]
+	path = docker-activemq
+	url = git@github.com:gutsal-arsen/docker-activemq.git
