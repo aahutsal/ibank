@@ -99,13 +99,12 @@ public class IBankRouteBuilder extends RouteBuilder {
 	    // Trying to perform transaction. Throwing exception if not possible
 	    .process(new Processor(){
 		    public void process(Exchange outExchange) {
-			Message message = outExchange.getIn();
-			String operation = message.getHeader("operation").toString();
-			Map accountFrom = (Map)accountsRef.get().get(new JsonPathExpression("$.from.customer").evaluate(outExchange).toString());
-			Map accountTo = (Map)accountsRef.get().get(new JsonPathExpression("$.to.customer").evaluate(outExchange).toString());
-			Double amount = getDoubleValue(new JsonPathExpression("$.amount").evaluate(outExchange));
+			final Message message = outExchange.getIn();
+			final String operation = message.getHeader("operation").toString();
+			final Map accountFrom = (Map)accountsRef.get().get(new JsonPathExpression("$.from.customer").evaluate(outExchange).toString());
+			final Map accountTo = (Map)accountsRef.get().get(new JsonPathExpression("$.to.customer").evaluate(outExchange).toString());
+			final Double amount = getDoubleValue(new JsonPathExpression("$.amount").evaluate(outExchange));
 			
-			System.out.println(accountFrom.get("balance"));
 			switch(operation.toLowerCase()){
 			case "send": {
 			    // Operation should be atomic
