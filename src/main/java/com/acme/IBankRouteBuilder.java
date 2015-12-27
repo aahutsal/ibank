@@ -108,22 +108,25 @@ public class IBankRouteBuilder extends RouteBuilder {
 			System.out.println(accountFrom.get("balance"));
 			switch(operation.toLowerCase()){
 			case "send": {
-			    //FIXME: SHOUL BE TRANSACTED HERE
-			    if(getDoubleValue(accountFrom.get("balance")) < amount){
-				throw new java.lang.IllegalStateException("Insufficient funds");
-			    } else {
-				accountFrom.put("balance", getDoubleValue(accountFrom.get("balance")) - amount);
-				accountTo.put("balance", getDoubleValue(accountTo.get("balance")) + amount);
+			    // Operation should be atomic
+			    synchronized(this){
+				if(getDoubleValue(accountFrom.get("balance")) < amount){
+				    throw new java.lang.IllegalStateException("Insufficient funds");
+				} else {
+				    accountFrom.put("balance", getDoubleValue(accountFrom.get("balance")) - amount);
+				    accountTo.put("balance", getDoubleValue(accountTo.get("balance")) + amount);
+				}
 			    }
 			};
 			case "receive": {
-			    //FIXME: SHOUL BE TRANSACTED HERE
-			    if(getDoubleValue(accountTo.get("balance")) < getDoubleValue(new JsonPathExpression("$.amount").evaluate(outExchange))){
-				throw new java.lang.IllegalStateException("Insufficient funds");
-			    } else {
-				//FIXME: SHOUL BE TRANSACTED HERE
-				accountFrom.put("balance", getDoubleValue(accountFrom.get("balance")) + amount);
-				accountTo.put("balance", getDoubleValue(accountTo.get("balance")) - amount);
+			    // Operation should be atomic			    
+			    synchronized(this){
+				if(getDoubleValue(accountTo.get("balance")) < getDoubleValue(new JsonPathExpression("$.amount").evaluate(outExchange))){
+				    throw new java.lang.IllegalStateException("Insufficient funds");
+				} else {				
+				    accountFrom.put("balance", getDoubleValue(accountFrom.get("balance")) + amount);
+				    accountTo.put("balance", getDoubleValue(accountTo.get("balance")) - amount);
+				}
 			    }
 			};
 			case "withdraw": {
