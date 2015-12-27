@@ -124,6 +124,19 @@
         </configuration>
       </plugin>
 
+      <plugin>
+      	<artifactId>maven-jar-plugin</artifactId>
+      	<configuration>
+      	  <archive>
+      	    <manifest>
+      	      <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+      	      <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
+      	    </manifest>
+      	  </archive>
+      	</configuration>
+      	<version>2.6</version>
+      </plugin>
+      
       <!-- Allows the example to be run via 'mvn compile exec:java' -->
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
@@ -131,24 +144,34 @@
         <version>1.2.1</version>
         <configuration>	  
           <mainClass>com.acme.MainApp</mainClass>
-          <includePluginDependencies>false</includePluginDependencies>
+          <includePluginDependencies>true</includePluginDependencies>
         </configuration>
       </plugin>
 
       <plugin>
-	<artifactId>maven-assembly-plugin</artifactId>
-	<configuration>
-	  <archive>
-	    <manifest>
-	      <mainClass>com.acme.MainApp</mainClass>
-	    </manifest>
-	  </archive>
-	  <descriptorRefs>
-	    <descriptorRef>jar-with-dependencies</descriptorRef>
-	  </descriptorRefs>
-	</configuration>
+	<groupId>org.apache.maven.plugins</groupId>
+	<artifactId>maven-shade-plugin</artifactId>
+	<version>2.4.2</version>
+	<executions>
+	  <execution>
+	    <phase>package</phase>
+	    <goals>
+	      <goal>shade</goal>
+	    </goals>
+	    <configuration>
+	        <transformers>
+		  <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+		    <manifestEntries>
+		      <Main-Class>com.acme.MainApp</Main-Class>
+		      <Build-Number>1</Build-Number>
+		    </manifestEntries>
+		  </transformer>
+		</transformers>
+	    </configuration>
+	  </execution>
+	</executions>
       </plugin>
-
+      
       <plugin>
 	<groupId>org.apache.camel</groupId>
 	<artifactId>camel-maven-plugin</artifactId>
