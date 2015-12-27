@@ -1,4 +1,4 @@
-3ipackage com.acme;
+package com.acme;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
@@ -16,6 +16,7 @@ import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.camel.Main;
 import org.springframework.core.io.ClassPathResource;
@@ -24,7 +25,6 @@ import org.springframework.core.io.ClassPathResource;
 import javax.jms.ConnectionFactory;
 import org.apache.activemq.ActiveMQConnectionFactory;
 
-import org.apache.commons.cli.*;
 
 import com.mongodb.Mongo;
 /**
@@ -36,38 +36,35 @@ public class MainApp {
      * A main() so we can easily run these routing rules in our IDE
      */    
     public static void main(String... args) throws Exception {
-	// create Options object
-	Options options = new Options();
-
-	// add t option
-	options.addOption("das", false, "DAS server running");
-	options.addOption("ibank", false, "iBank server running");
-	options.addOption("activemq", true, "ActiveMQ URL");
-
-	CommandLineParser parser = new DefaultParser();
-	CommandLine cmd = parser.parse(options, args);
-
-				    
 	// create a Main instance
 	Main main = new Main();
 	// enable hangup support so you can press ctrl + c to terminate the JVM
 	main.enableHangupSupport();
 	String activemqUrl = "tcp://localhost:61616";
+	Map<String, String> env = System.getenv();
 	
-	if(cmd.hasOption("activemq")){
-	    activemqUrl = cmd.getOptionValue("activemq");
+	if(env.containsKey("IBANK_ACTIVEMQURL")){
+	    activemqUrl = env.get("IBANK_ACTIVEMQURL");
 	}
-	    
-	ConnectionFactory connectionFactory = new ActiveMQConnectionFactory(activemqUrl);
+	ConnectionFactory connectionFactory;
+	if(env.containsKey("IBANK_ACTIVEMQ_USER") && env.containsKey("IBANK_ACTIVEMQ_PASSWORD")){
+	    connectionFactory =
+		new ActiveMQConnectionFactory(env.get("IBANK_ACTIVEMQ_USER"),
+					      env.get("IBANK_ACTIVEMQ_PASSWORD"),
+					      activemqUrl);
+	} else {
+	    connectionFactory = new ActiveMQConnectionFactory(activemqUrl);
+	}
+
 
 	//bind main bean into the registery
 	main.bind("main", new MainApp());
 	main.bind("mongoBean", new com.mongodb.Mongo("localhost", 27017));
 
-	if(cmd.hasOption("das")){
+	if(env.containsKey("IBANK_DAS")){
 	    main.addRouteBuilder(new DASBankRouteBuilder(connectionFactory));	    
 	}
-	if(cmd.hasOption("ibank")){
+	if(env.containsKey("IBANK_IBANK")){
 	    main.addRouteBuilder(new IBankRouteBuilder(connectionFactory));
 	}
 	
