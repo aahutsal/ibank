@@ -72,7 +72,7 @@ public class DASBankRouteBuilder extends RouteBuilder {
 	    .to("mongodb:myDb?database=ibank&collection=completed&operation=findAll&dynamicity=true")
 	    .to("mock:resultFindAll");
 	
-	from("restlet:http://localhost:8181/reports?restletMethod=post")
+	from("restlet:http://localhost:8181/reports?restletMethods=post,get")
 	    .to("direct:findAll");
     }
 }
