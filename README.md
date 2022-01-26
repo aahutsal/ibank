@@ -67,5 +67,5 @@ Please, note DAS server should be running
 
 For more help see the Apache Camel documentation
 
-    http://github.com/gutsal-arsen/ibank/
+    http://github.com/aahutsal/ibank/
 
