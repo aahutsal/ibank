@@ -39,7 +39,7 @@
     <dependency>
       <groupId>org.apache.camel</groupId>
       <artifactId>camel-mongodb</artifactId>
-      <version>3.16.0</version>
+      <version>3.24.0</version>
       <!-- use the same version as your Camel core version -->
     </dependency>
 
